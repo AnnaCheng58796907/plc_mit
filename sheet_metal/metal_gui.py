@@ -32,7 +32,7 @@ class MetalApp:
 
         # 材質下拉選單
         tk.Label(self.root, text="1. 選擇材質:").pack()
-        self.materials = self.df["材質"].unique().tolist()
+        self.materials = self.df["材質 (Material)"].unique().tolist()
         self.combo_mat = ttk.Combobox(self.root, values=self.materials, state="readonly")
         self.combo_mat.pack(pady=5)
         self.combo_mat.bind("<<ComboboxSelected>>", self.update_thickness_options)
@@ -72,7 +72,7 @@ class MetalApp:
     def update_thickness_options(self, event):
         selected_mat = self.combo_mat.get()
         # 篩選該材質擁有的厚度
-        thicknesses = self.df[self.df["材質"] == selected_mat]["厚度"].tolist()
+        thicknesses = self.df[self.df["材質 (Material)"] == selected_mat]["厚度 (Thickness)"].tolist()
         self.combo_thick.config(values=thicknesses)
         self.combo_thick.set("")
         self.entry_k.delete(0, tk.END)
@@ -81,7 +81,7 @@ class MetalApp:
         selected_mat = self.combo_mat.get()
         selected_thick = float(self.combo_thick.get())
         # 找出對應的 K-Factor
-        k_val = self.df[(self.df["材質"] == selected_mat) & (self.df["厚度"] == selected_thick)]["折彎係數"].values[0]
+        k_val = self.df[(self.df["材質 (Material)"] == selected_mat) & (self.df["厚度 (Thickness)"] == selected_thick)]["折彎係數 (K-Factor)"].values[0]
         self.entry_k.delete(0, tk.END)
         self.entry_k.insert(0, str(k_val))
 
