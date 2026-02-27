@@ -1,3 +1,11 @@
+'''
+打包程式
+pyinstaller --onefile --windowed your_script_name.py
+'''
+
 pandas
 pymodbus
 pymcprotocol
+minimalmodbus
+pyserial
+PyQt5
