@@ -6,8 +6,8 @@ import os
 class MetalApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("板金係數對照計算器 v3.0")
-        self.root.geometry("500x750")
+        self.root.title("板金全功能計算器 v3.5 (角度換算版)")
+        self.root.geometry("500x800")
         
         self.excel_file = "bend_parameters.xlsx"
         self.load_excel_data()
@@ -15,92 +15,104 @@ class MetalApp:
 
     def load_excel_data(self):
         if not os.path.exists(self.excel_file):
-            messagebox.showwarning("警告", f"找不到 {self.excel_file}\n請建立格式為「縱向材質、橫向厚度」的 Excel。")
+            messagebox.showwarning("警告", f"找不到 {self.excel_file}")
             self.df = pd.DataFrame()
         else:
             try:
-                # 讀取 Excel，將第一列(材質)設為索引
+                # 讀取矩陣式 Excel
                 self.df = pd.read_excel(self.excel_file, index_col=0)
-                # 確保欄位名稱(厚度)為字串，方便下拉選單使用
                 self.df.columns = [str(col) for col in self.df.columns]
             except Exception as e:
-                messagebox.showerror("錯誤", f"Excel 讀取失敗: {e}")
+                messagebox.showerror("錯誤", f"讀取失敗: {e}")
 
     def create_widgets(self):
-        tk.Label(self.root, text="板金展開計算 (Excel 矩陣對照)", font=("Microsoft JhengHei", 14, "bold")).pack(pady=15)
+        tk.Label(self.root, text="板金展開計算器 (動態角度)", font=("Microsoft JhengHei", 14, "bold")).pack(pady=15)
 
-        # --- 參數選擇區 ---
-        group_param = tk.LabelFrame(self.root, text="自動係數查詢", padx=15, pady=15)
-        group_param.pack(padx=20, fill="x")
+        # --- 第一區：自動搜尋 (與之前相同) ---
+        group_search = tk.LabelFrame(self.root, text="Step 1: 參數檢索", padx=15, pady=10)
+        group_search.pack(padx=20, fill="x")
 
-        # 材質選擇
-        tk.Label(group_param, text="1. 選擇材質 (縱向):").pack(anchor="w")
-        materials = self.df.index.tolist() if not self.df.empty else []
-        self.combo_mat = ttk.Combobox(group_param, values=materials, state="readonly")
-        self.combo_mat.pack(fill="x", pady=5)
+        tk.Label(group_search, text="選擇材質:").pack(anchor="w")
+        self.combo_mat = ttk.Combobox(group_search, values=self.df.index.tolist(), state="readonly")
+        self.combo_mat.pack(fill="x", pady=2)
         self.combo_mat.bind("<<ComboboxSelected>>", self.on_selection_change)
 
-        # 厚度選擇
-        tk.Label(group_param, text="2. 選擇厚度 (橫向):").pack(anchor="w")
-        thicknesses = self.df.columns.tolist() if not self.df.empty else []
-        self.combo_thick = ttk.Combobox(group_param, values=thicknesses, state="readonly")
-        self.combo_thick.pack(fill="x", pady=5)
+        tk.Label(group_search, text="選擇厚度 (T):").pack(anchor="w")
+        self.combo_thick = ttk.Combobox(group_search, values=self.df.columns.tolist(), state="readonly")
+        self.combo_thick.pack(fill="x", pady=2)
         self.combo_thick.bind("<<ComboboxSelected>>", self.on_selection_change)
 
-        # 顯示查找到的 K 值
-        tk.Label(group_param, text="對應折彎係數 (K):").pack(anchor="w")
-        self.entry_k = tk.Entry(group_param, font=("Arial", 11, "bold"), fg="red", bg="#eee")
-        self.entry_k.pack(fill="x", pady=5)
+        tk.Label(group_search, text="90度標準係數 (K90):").pack(anchor="w")
+        self.entry_k90 = tk.Entry(group_search, bg="#f0f0f0")
+        self.entry_k90.pack(fill="x", pady=2)
 
-        # --- 尺寸計算區 ---
-        group_calc = tk.LabelFrame(self.root, text="尺寸計算", padx=15, pady=15)
-        group_calc.pack(padx=20, pady=15, fill="x")
+        # --- 第二區：角度與尺寸 ---
+        group_calc = tk.LabelFrame(self.root, text="Step 2: 尺寸與角度輸入", padx=15, pady=10)
+        group_calc.pack(padx=20, pady=10, fill="x")
+
+        tk.Label(group_calc, text="折彎角度 (度):").pack(anchor="w")
+        self.entry_angle = tk.Entry(group_calc)
+        self.entry_angle.insert(0, "90") # 預設 90
+        self.entry_angle.pack(fill="x", pady=2)
 
         tk.Label(group_calc, text="外部邊長總和 (ΣA):").pack(anchor="w")
         self.entry_sum = tk.Entry(group_calc)
-        self.entry_sum.pack(fill="x", pady=5)
+        self.entry_sum.pack(fill="x", pady=2)
 
         tk.Label(group_calc, text="折彎次數 (n):").pack(anchor="w")
         self.spin_n = tk.Spinbox(group_calc, from_=1, to=20)
-        self.spin_n.pack(fill="x", pady=5)
+        self.spin_n.pack(fill="x", pady=2)
 
-        # 按鈕
+        # --- 計算按鈕 ---
         self.btn_calc = tk.Button(self.root, text="執行公式計算", command=self.calculate, 
                                   bg="#28a745", fg="white", font=("Microsoft JhengHei", 12, "bold"))
-        self.btn_calc.pack(pady=10, ipadx=30)
+        self.btn_calc.pack(pady=15, ipadx=40)
 
-        # 結果
-        self.res_label = tk.Label(self.root, text="結果: -- mm", font=("Consolas", 14, "bold"), fg="#0056b3")
-        self.res_label.pack(pady=20)
+        # --- 結果顯示 ---
+        self.res_frame = tk.LabelFrame(self.root, text="計算報告", padx=10, pady=10)
+        self.res_frame.pack(padx=20, fill="both", expand=True)
+        self.label_res = tk.Label(self.res_frame, text="等待計算...", font=("Consolas", 10), justify="left")
+        self.label_res.pack(anchor="w")
 
     def on_selection_change(self, event):
-        """當材質或厚度改變時，自動去 Excel 矩陣找數值"""
         mat = self.combo_mat.get()
         thick = self.combo_thick.get()
-        
         if mat and thick:
             try:
-                # 根據橫縱座標查找
-                k_val = self.df.loc[mat, thick]
-                self.entry_k.delete(0, tk.END)
-                self.entry_k.insert(0, str(k_val))
-            except Exception:
-                self.entry_k.delete(0, tk.END)
-                self.entry_k.insert(0, "無資料")
+                k90 = self.df.loc[mat, thick]
+                self.entry_k90.delete(0, tk.END)
+                self.entry_k90.insert(0, str(k90))
+            except:
+                pass
 
     def calculate(self):
         try:
-            # 讀取數值
-            sigma_a = float(self.entry_sum.get())
+            # 取得基礎值
             t = float(self.combo_thick.get())
-            k = float(self.entry_k.get())
+            k90 = float(self.entry_k90.get())
+            angle = float(self.entry_angle.get())
+            sigma_a = float(self.entry_sum.get())
             n = int(self.spin_n.get())
 
-            # 您的公式: (ΣA) - (n * 2T) + (n * K)
-            result = sigma_a - (n * 2 * t) + (n * k)
-            self.res_label.config(text=f"總展開長度: {result:.3f} mm")
-        except:
-            messagebox.showerror("錯誤", "請檢查輸入數值與 Excel 選項是否正確")
+            # 1. 計算該角度下的調整係數 K_adj
+            # 公式: (K90 / 90) * (180 - Angle)
+            k_adj = (k90 / 90) * (180 - angle)
+
+            # 2. 計算總展開長度
+            # 公式: ΣA - (n * 2T) + (n * K_adj)
+            result = sigma_a - (n * 2 * t) + (n * k_adj)
+
+            report = (
+                f"角度調整係數 (K'): {k_adj:.3f}\n"
+                f"總扣除值 (n*2T): -{n * 2 * t:.2f} mm\n"
+                f"總補償值 (n*K'): +{n * k_adj:.2f} mm\n"
+                f"--------------------------------\n"
+                f"最終展開長度: {result:.3f} mm"
+            )
+            self.label_res.config(text=report)
+
+        except Exception as e:
+            messagebox.showerror("計算錯誤", "請確認所有欄位已填寫正確數值")
 
 if __name__ == "__main__":
     root = tk.Tk()
