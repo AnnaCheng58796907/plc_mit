@@ -13,6 +13,7 @@ from pymcprotocol import Type3E
 # ----------------------------------------------------
 # 背景工作執行緒，負責連線和讀取PLC資料
 # ----------------------------------------------------
+
 class PlcReaderThread(QThread):
     data_ready = pyqtSignal(dict)
     
