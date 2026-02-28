@@ -3,15 +3,16 @@ from tkinter import messagebox, ttk
 import pandas as pd
 import os
 
+
 class MetalApp:
     def __init__(self, root):
         self.root = root
         self.root.title("板金設計綜合工具 v5.5")
         self.root.geometry("600x850")
-        
+      
         self.excel_file = "bend_parameters.xlsx"
-        self.angle_entries = [] # 儲存展開分頁的角度輸入框
-        
+        self.angle_entries = []  # 儲存展開分頁的角度輸入框
+      
         self.load_all_data()
         
         # 建立分頁控鍵
@@ -128,8 +129,10 @@ class MetalApp:
     def refresh_angles(self):
         for w in self.angle_area.winfo_children(): w.destroy()
         self.angle_entries = []
-        try: n = int(self.s_n.get())
-        except: n = 1
+        try: 
+            n = int(self.s_n.get())
+        except: 
+            n = 1
         for i in range(n):
             f = tk.Frame(self.angle_area); f.pack(fill="x", pady=1)
             tk.Label(f, text=f"折彎 {i+1} 角度:").pack(side="left")
@@ -145,7 +148,8 @@ class MetalApp:
             n = len(self.angle_entries)
             res = sum_a - (n*2*t) + total_k
             self.l_bend_res.config(text=f"總展開長度: {res:.3f} mm")
-        except: messagebox.showerror("錯誤", "請檢查輸入數值")
+        except:
+            messagebox.showerror("錯誤", "請檢查輸入數值")
 
     def lookup_hardware(self, event):
         t, s = self.c_hw_type.get(), self.c_hw_spec.get()
@@ -153,5 +157,6 @@ class MetalApp:
             val = self.df_hw.loc[t, s]
             self.l_hw_hole.config(text=f"Ø {val} mm" if str(val) != "nan" else "無對應資料")
 
+# --- 主程式 ---
 if __name__ == "__main__":
     root = tk.Tk(); app = MetalApp(root); root.mainloop()
