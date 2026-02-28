@@ -6,127 +6,152 @@ import os
 class MetalApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("板金多角度展開計算器 v4.0")
-        self.root.geometry("550x850")
+        self.root.title("板金設計綜合工具 v5.5")
+        self.root.geometry("600x850")
         
         self.excel_file = "bend_parameters.xlsx"
-        self.angle_entries = [] # 儲存動態生成的角度輸入框
-        self.load_excel_data()
-        self.create_widgets()
+        self.angle_entries = [] # 儲存展開分頁的角度輸入框
+        
+        self.load_all_data()
+        
+        # 建立分頁控鍵
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(expand=True, fill="both")
+        
+        # 建立兩個主要分頁
+        self.tab_bend = tk.Frame(self.notebook)
+        self.tab_hw = tk.Frame(self.notebook)
+        
+        self.notebook.add(self.tab_bend, text=" 📐 板金展開計算 ")
+        self.notebook.add(self.tab_hw, text=" 🔩 鉚合零件查詢 ")
+        
+        self.setup_bend_tab()      # 設置分頁 1 (展開)
+        self.setup_hardware_tab()  # 設置分頁 2 (硬體)
 
-    def load_excel_data(self):
+    def load_all_data(self):
+        """讀取 Excel 中的兩個矩陣工作表"""
         if not os.path.exists(self.excel_file):
-            messagebox.showwarning("警告", f"找不到 {self.excel_file}")
-            self.df = pd.DataFrame()
+            messagebox.showwarning("警告", f"找不到 {self.excel_file}\n請確認 Excel 包含兩個分頁。")
+            self.df_bend = pd.DataFrame()
+            self.df_hw = pd.DataFrame()
         else:
             try:
-                self.df = pd.read_excel(self.excel_file, index_col=0)
-                self.df.columns = [str(col) for col in self.df.columns]
+                # 讀取工作表1: 折彎參數 (假設在第1頁)
+                self.df_bend = pd.read_excel(self.excel_file, sheet_name=0, index_col=0)
+                self.df_bend.columns = [str(col) for col in self.df_bend.columns]
+                
+                # 讀取工作表2: Hardware (矩陣格式)
+                self.df_hw = pd.read_excel(self.excel_file, sheet_name="Hardware", index_col=0)
+                self.df_hw.columns = [str(col) for col in self.df_hw.columns]
             except Exception as e:
-                messagebox.showerror("錯誤", f"讀取失敗: {e}")
+                messagebox.showerror("錯誤", f"Excel 讀取失敗: {e}")
 
-    def create_widgets(self):
-        tk.Label(self.root, text="板金多折彎-各別角度計算", font=("Microsoft JhengHei", 14, "bold")).pack(pady=10)
+    # --- 分頁 1: 多角度展開計算 ---
+    def setup_bend_tab(self):
+        container = tk.Frame(self.tab_bend, padx=20, pady=10)
+        container.pack(fill="both", expand=True)
 
-        # --- 第一區：Excel 參數 ---
-        group_excel = tk.LabelFrame(self.root, text="1. 材質與厚度 (Excel 檢索)", padx=10, pady=10)
-        group_excel.pack(padx=20, fill="x")
-
-        tk.Label(group_excel, text="材質:").grid(row=0, column=0, sticky="w")
-        self.combo_mat = ttk.Combobox(group_excel, values=self.df.index.tolist(), state="readonly")
-        self.combo_mat.grid(row=0, column=1, sticky="ew", padx=5)
-        self.combo_mat.bind("<<ComboboxSelected>>", self.on_selection_change)
-
-        tk.Label(group_excel, text="厚度 (T):").grid(row=1, column=0, sticky="w")
-        self.combo_thick = ttk.Combobox(group_excel, values=self.df.columns.tolist(), state="readonly")
-        self.combo_thick.grid(row=1, column=1, sticky="ew", padx=5)
-        self.combo_thick.bind("<<ComboboxSelected>>", self.on_selection_change)
-
-        tk.Label(group_excel, text="90°標準K值:").grid(row=2, column=0, sticky="w")
-        self.entry_k90 = tk.Entry(group_excel, bg="#f0f0f0")
-        self.entry_k90.grid(row=2, column=1, sticky="ew", padx=5)
-
-        # --- 第二區：折彎數量設定 ---
-        group_config = tk.Frame(self.root, padx=20, pady=10)
-        group_config.pack(fill="x")
-
-        tk.Label(group_config, text="外部邊長總和 (ΣA):").grid(row=0, column=0, sticky="w")
-        self.entry_sum = tk.Entry(group_config)
-        self.entry_sum.grid(row=0, column=1, sticky="ew", padx=5)
-
-        tk.Label(group_config, text="折彎次數 (n):").grid(row=1, column=0, sticky="w")
-        self.spin_n = tk.Spinbox(group_config, from_=1, to=10, command=self.update_angle_inputs)
-        self.spin_n.grid(row=1, column=1, sticky="w", padx=5)
-        # 綁定鍵盤輸入事件，手動輸入數字也會更新
-        self.spin_n.bind("<KeyRelease>", lambda e: self.update_angle_inputs())
-
-        # --- 第三區：動態角度輸入區 ---
-        self.angle_frame = tk.LabelFrame(self.root, text="2. 設定各別折彎角度", padx=10, pady=10)
-        self.angle_frame.pack(padx=20, pady=10, fill="both", expand=True)
+        tk.Label(container, text="板金參數與折彎設定", font=("Arial", 12, "bold")).pack(pady=5)
         
-        self.update_angle_inputs() # 初始化顯示一個輸入框
+        # 選擇材質/厚度
+        f_top = tk.Frame(container)
+        f_top.pack(fill="x")
+        
+        tk.Label(f_top, text="材質:").grid(row=0, column=0, sticky="w")
+        self.c_mat = ttk.Combobox(f_top, values=self.df_bend.index.tolist(), state="readonly")
+        self.c_mat.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
+        self.c_mat.bind("<<ComboboxSelected>>", self.update_bend_k)
 
-        # --- 計算與結果 ---
-        self.btn_calc = tk.Button(self.root, text="開始計算展開長度", command=self.calculate, 
-                                  bg="#0056b3", fg="white", font=("Arial", 11, "bold"))
-        self.btn_calc.pack(pady=10, ipadx=50)
+        tk.Label(f_top, text="厚度:").grid(row=1, column=0, sticky="w")
+        self.c_thick = ttk.Combobox(f_top, values=self.df_bend.columns.tolist(), state="readonly")
+        self.c_thick.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
+        self.c_thick.bind("<<ComboboxSelected>>", self.update_bend_k)
 
-        self.res_label = tk.Label(self.root, text="結果: --", font=("Consolas", 12, "bold"), fg="#d9534f")
-        self.res_label.pack(pady=10)
+        tk.Label(f_top, text="90° K值:").grid(row=2, column=0, sticky="w")
+        self.e_k90 = tk.Entry(f_top, bg="#eee")
+        self.e_k90.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
 
-    def on_selection_change(self, event):
-        mat = self.combo_mat.get()
-        thick = self.combo_thick.get()
-        if mat and thick:
-            try:
-                k90 = self.df.loc[mat, thick]
-                self.entry_k90.delete(0, tk.END)
-                self.entry_k90.insert(0, str(k90))
-            except: pass
+        # 尺寸與次數
+        tk.Label(container, text="外部邊長總和:").pack(anchor="w", pady=(10,0))
+        self.e_sum_a = tk.Entry(container)
+        self.e_sum_a.pack(fill="x", pady=2)
 
-    def update_angle_inputs(self):
-        """根據折彎次數動態增減角度輸入框"""
-        # 清除舊的輸入框
-        for widget in self.angle_frame.winfo_children():
-            widget.destroy()
+        tk.Label(container, text="折彎次數 (n):").pack(anchor="w")
+        self.s_n = tk.Spinbox(container, from_=1, to=10, command=self.refresh_angles)
+        self.s_n.pack(fill="x", pady=2)
+        self.s_n.bind("<KeyRelease>", lambda e: self.refresh_angles())
+
+        self.angle_area = tk.LabelFrame(container, text="各折彎角度 (°)", padx=10, pady=10)
+        self.angle_area.pack(fill="both", expand=True, pady=10)
+        self.refresh_angles()
+
+        tk.Button(container, text="計算展開長度", bg="#28a745", fg="white", font=("Arial", 11, "bold"),
+                  command=self.calc_bend).pack(fill="x", pady=10)
+        self.l_bend_res = tk.Label(container, text="結果: --", font=("Arial", 12, "bold"), fg="blue")
+        self.l_bend_res.pack()
+
+    # --- 分頁 2: 鉚合開孔查詢 (矩陣對照) ---
+    def setup_hardware_tab(self):
+        container = tk.Frame(self.tab_hw, padx=30, pady=20)
+        container.pack(fill="both", expand=True)
+
+        tk.Label(container, text="零件開孔規格檢索", font=("Arial", 14, "bold")).pack(pady=10)
+
+        # 種類選擇 (縱向)
+        tk.Label(container, text="1. 選擇零件種類 (如螺帽/螺柱):").pack(anchor="w")
+        hw_types = self.df_hw.index.tolist() if not self.df_hw.empty else []
+        self.c_hw_type = ttk.Combobox(container, values=hw_types, state="readonly")
+        self.c_hw_type.pack(fill="x", pady=5)
+        self.c_hw_type.bind("<<ComboboxSelected>>", self.lookup_hardware)
+
+        # 規格選擇 (橫向)
+        tk.Label(container, text="2. 選擇規格尺寸 (如 M3, 1/8\"):").pack(anchor="w")
+        hw_specs = self.df_hw.columns.tolist() if not self.df_hw.empty else []
+        self.c_hw_spec = ttk.Combobox(container, values=hw_specs, state="readonly")
+        self.c_hw_spec.pack(fill="x", pady=5)
+        self.c_hw_spec.bind("<<ComboboxSelected>>", self.lookup_hardware)
+
+        # 顯示結果
+        self.hw_res_frame = tk.LabelFrame(container, text="查詢結果", padx=20, pady=20)
+        self.hw_res_frame.pack(fill="x", pady=30)
+        
+        self.l_hw_hole = tk.Label(self.hw_res_frame, text="建議開孔: --", font=("Arial", 20, "bold"), fg="#d9534f")
+        self.l_hw_hole.pack()
+
+    # --- 邏輯處理 ---
+    def update_bend_k(self, event):
+        m, t = self.c_mat.get(), self.c_thick.get()
+        if m and t:
+            self.e_k90.delete(0, tk.END)
+            self.e_k90.insert(0, str(self.df_bend.loc[m, t]))
+
+    def refresh_angles(self):
+        for w in self.angle_area.winfo_children(): w.destroy()
         self.angle_entries = []
-
-        try:
-            n = int(self.spin_n.get())
+        try: n = int(self.s_n.get())
         except: n = 1
-
         for i in range(n):
-            row_f = tk.Frame(self.angle_frame)
-            row_f.pack(fill="x", pady=2)
-            tk.Label(row_f, text=f"第 {i+1} 個角度 (°):", width=15).pack(side="left")
-            ent = tk.Entry(row_f)
-            ent.insert(0, "90") # 預設 90 度
-            ent.pack(side="right", expand=True, fill="x")
-            self.angle_entries.append(ent)
+            f = tk.Frame(self.angle_area); f.pack(fill="x", pady=1)
+            tk.Label(f, text=f"折彎 {i+1} 角度:").pack(side="left")
+            e = tk.Entry(f); e.insert(0, "90"); e.pack(side="right", expand=True, fill="x")
+            self.angle_entries.append(e)
 
-    def calculate(self):
+    def calc_bend(self):
         try:
-            sigma_a = float(self.entry_sum.get())
-            t = float(self.combo_thick.get())
-            k90 = float(self.entry_k90.get())
-            
-            total_k_adj = 0
+            sum_a = float(self.e_sum_a.get())
+            t = float(self.c_thick.get())
+            k90 = float(self.e_k90.get())
+            total_k = sum([(k90/90)*(180-float(e.get())) for e in self.angle_entries])
             n = len(self.angle_entries)
-            
-            # 遍歷每個角度輸入框計算補償
-            for ent in self.angle_entries:
-                angle = float(ent.get())
-                # 公式: (K90 / 90) * (180 - Angle)
-                total_k_adj += (k90 / 90) * (180 - angle)
+            res = sum_a - (n*2*t) + total_k
+            self.l_bend_res.config(text=f"總展開長度: {res:.3f} mm")
+        except: messagebox.showerror("錯誤", "請檢查輸入數值")
 
-            # 總展開長度 = ΣA - (n * 2 * T) + ΣK_adj
-            result = sigma_a - (n * 2 * t) + total_k_adj
-            
-            self.res_label.config(text=f"總展開長度: {result:.3f} mm\n(總扣除: {n*2*t:.2f}, 總補償: {total_k_adj:.3f})")
-        except Exception:
-            messagebox.showerror("錯誤", "請檢查所有數值是否輸入正確")
+    def lookup_hardware(self, event):
+        t, s = self.c_hw_type.get(), self.c_hw_spec.get()
+        if t and s:
+            val = self.df_hw.loc[t, s]
+            self.l_hw_hole.config(text=f"Ø {val} mm" if str(val) != "nan" else "無對應資料")
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = MetalApp(root)
-    root.mainloop()
+    root = tk.Tk(); app = MetalApp(root); root.mainloop()
