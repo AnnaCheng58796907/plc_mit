@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>板金大師 Pro</title>
+    <style>
+        :root { --primary: #007AFF; --bg: #F2F2F7; --card: #FFFFFF; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 10px; padding-bottom: 50px; }
+        .card { background: var(--card); border-radius: 15px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h2 { margin-top: 0; font-size: 18px; color: #1C1C1E; border-bottom: 1px solid #E5E5EA; padding-bottom: 10px; }
+        label { display: block; font-size: 13px; color: #8E8E93; margin-top: 10px; }
+        input, select { width: 100%; height: 45px; border: 1px solid #D1D1D6; border-radius: 10px; font-size: 17px; padding: 0 12px; box-sizing: border-box; margin-top: 4px; background: white; }
+        
+        .btn { border: none; border-radius: 12px; font-weight: bold; font-size: 16px; transition: 0.2s; active { opacity: 0.7; } }
+        .btn-main { width: 100%; height: 50px; background: var(--primary); color: white; margin-top: 20px; }
+        .btn-add { background: #E5E5EA; color: #007AFF; padding: 10px; font-size: 14px; margin-top: 10px; width: auto; }
+        .btn-del { background: #FF3B30; color: white; width: 40px; height: 40px; margin-left: 5px; border-radius: 8px; }
+
+        .angle-row { display: flex; align-items: flex-end; margin-top: 10px; animation: fadeIn 0.3s; }
+        .angle-row div { flex: 1; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .nav { display: flex; justify-content: space-around; background: white; padding: 10px; border-radius: 20px; margin-bottom: 15px; }
+        .nav-item { padding: 8px 15px; border-radius: 15px; font-size: 14px; color: #8E8E93; cursor: pointer; }
+        .nav-item.active { background: var(--primary); color: white; }
+        .hidden { display: none; }
+        #result-box { background: #F8F9FF; padding: 15px; border-radius: 10px; margin-top: 15px; border: 1px solid #D1D1D6; }
+    </style>
+</head>
+<body>
+
+    <div class="nav">
+        <div class="nav-item active" id="tab-btn-1" onclick="switchTab(1)">📐 展開計算</div>
+        <div class="nav-item" id="tab-btn-2" onclick="switchTab(2)">🔩 零件查詢</div>
+    </div>
+
+    <div id="tab-1" class="tab-content">
+        <div class="card">
+            <h2>板金參數</h2>
+            <label>材質 (請輸入 90° K值)</label>
+            <input type="number" id="k90" step="0.01" placeholder="例如: 0.44">
+            
+            <label>板厚 (T)</label>
+            <input type="number" id="thick" step="0.1" placeholder="mm">
+            
+            <label>外部邊長總和 (ΣA)</label>
+            <input type="number" id="sumA" placeholder="所有邊長加總">
+        </div>
+
+        <div class="card">
+            <h2>折彎設定 (可自行增加)</h2>
+            <div id="angle-container">
+                </div>
+            <button class="btn btn-add" onclick="addAngle()">＋ 新增折彎次數</button>
+            
+            <button class="btn btn-main" onclick="calculateResult()">執行展開計算</button>
+            
+            <div id="result-box" class="hidden">
+                <div style="font-size: 14px; color: #666;">總展開長度</div>
+                <div id="final-res" style="font-size: 28px; font-weight: bold; color: #007AFF;">--</div>
+                <div id="detail-res" style="font-size: 12px; color: #8E8E93; margin-top: 5px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-2" class="tab-content hidden">
+        <div class="card">
+            <h2>零件開孔查詢</h2>
+            <label>零件類別/規格</label>
+            <input type="text" id="hw-search" placeholder="輸入關鍵字 (如 M3)">
+            <button class="btn btn-main" onclick="searchHW()">搜尋資料庫</button>
+            
+            <div id="hw-result" class="hidden" style="text-align: center; margin-top: 20px;">
+                <div style="font-size: 14px;">建議開孔</div>
+                <div id="hw-hole" style="font-size: 40px; font-weight: bold; color: #FF3B30;">--</div>
+            </div>
+        </div>
+        <div style="font-size: 11px; color: #C7C7CC; text-align: center; padding: 20px;">
+            提示：可於代碼中自定義 Hardware 矩陣資料
+        </div>
+    </div>
+
+    <script>
+        let angleCount = 0;
+
+        function switchTab(idx) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            document.getElementById('tab-' + idx).classList.remove('hidden');
+            document.getElementById('tab-btn-' + idx).classList.add('active');
+        }
+
+        function addAngle() {
+            angleCount++;
+            const container = document.getElementById('angle-container');
+            const div = document.createElement('div');
+            div.className = 'angle-row';
+            div.id = 'row-' + angleCount;
+            div.innerHTML = `
+                <div>
+                    <label>第 ${angleCount} 折角度 (°)</label>
+                    <input type="number" class="angle-val" value="90">
+                </div>
+                <button class="btn btn-del" onclick="removeAngle(${angleCount})">✕</button>
+            `;
+            container.appendChild(div);
+        }
+
+        function removeAngle(id) {
+            const row = document.getElementById('row-' + id);
+            row.remove();
+        }
+
+        function calculateResult() {
+            const k90 = parseFloat(document.getElementById('k90').value);
+            const t = parseFloat(document.getElementById('thick').value);
+            const sumA = parseFloat(document.getElementById('sumA').value);
+            const angles = document.querySelectorAll('.angle-val');
+            
+            if (isNaN(k90) || isNaN(t) || isNaN(sumA)) {
+                alert("請完整填寫基礎參數");
+                return;
+            }
+
+            let totalKAdj = 0;
+            let n = angles.length;
+
+            angles.forEach(input => {
+                let ang = parseFloat(input.value);
+                // 公式: (K90/90) * (180 - Angle)
+                totalKAdj += (k90 / 90) * (180 - ang);
+            });
+
+            const finalL = sumA - (n * 2 * t) + totalKAdj;
+
+            document.getElementById('result-box').classList.remove('hidden');
+            document.getElementById('final-res').innerText = finalL.toFixed(3) + " mm";
+            document.getElementById('detail-res').innerText = `扣除量: -${(n*2*t).toFixed(2)} | 補償量: +${totalKAdj.toFixed(3)}`;
+        }
+
+        // 預設增加一組折彎
+        addAngle();
+
+        // 模擬 Hardware 資料 (可依據你的 Excel 修改此處)
+        const hwData = { "M2": 3.7, "M2.5": 4.2, "M3": 4.2, "M4": 5.4, "M5": 6.4 };
+        function searchHW() {
+            const key = document.getElementById('hw-search').value.toUpperCase();
+            const res = hwData[key];
+            document.getElementById('hw-result').classList.remove('hidden');
+            document.getElementById('hw-hole').innerText = res ? "Ø " + res : "查無資料";
+        }
+    </script>
+</body>
+</html>
