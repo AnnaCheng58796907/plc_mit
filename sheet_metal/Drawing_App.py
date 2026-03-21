@@ -12,11 +12,11 @@ from PyQt5.QtGui import QFont
 class DrawingApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("圖號編碼管理系統 v5.0 (含暫存與多格式匯出)")
+        self.setWindowTitle("圖號編碼管理系統 v6.0 (含全數清空功能)")
         self.setGeometry(100, 100, 1000, 800)
         
         self.csv_file = 'process_codes.csv'
-        self.temp_records = [] # 用於存放本次作業的編碼紀錄
+        self.temp_records = [] # 存放本次作業的編碼紀錄
         self.load_data()
         
         self.central_widget = QWidget()
@@ -43,11 +43,10 @@ class DrawingApp(QMainWindow):
         else:
             self.df = pd.read_csv(self.csv_file)
 
-    # --- 介面 1: 圖號產生器 ---
     def init_generator_ui(self):
         layout = QVBoxLayout(self.tab_generator)
         
-        # 上半部：輸入區
+        # --- 區塊 1: 輸入區 ---
         input_box = QGroupBox("編碼輸入")
         grid = QVBoxLayout()
         
@@ -85,16 +84,14 @@ class DrawingApp(QMainWindow):
         input_box.setLayout(grid)
         layout.addWidget(input_box)
 
-        # 中間：功能按鈕
-        btn_layout = QHBoxLayout()
+        # --- 區塊 2: 生成按鈕 ---
         self.btn_gen = QPushButton("生成並儲存至紀錄")
-        self.btn_gen.setStyleSheet("background-color: #27ae60; color: white; height: 40px; font-weight: bold;")
+        self.btn_gen.setStyleSheet("background-color: #27ae60; color: white; height: 45px; font-weight: bold; font-size: 14px;")
         self.btn_gen.clicked.connect(self.generate_and_save)
-        btn_layout.addWidget(self.btn_gen)
-        layout.addLayout(btn_layout)
+        layout.addWidget(self.btn_gen)
 
-        # 下半部：紀錄顯示區
-        record_box = QGroupBox("本次編碼紀錄 (選取列後可按右鍵或下方按鈕刪除)")
+        # --- 區塊 3: 紀錄顯示與功能區 ---
+        record_box = QGroupBox("本次編碼紀錄清單")
         record_layout = QVBoxLayout()
         
         self.table_record = QTableWidget()
@@ -103,21 +100,35 @@ class DrawingApp(QMainWindow):
         self.table_record.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         record_layout.addWidget(self.table_record)
         
-        # 匯出與刪除按鈕
-        export_layout = QHBoxLayout()
-        btn_del_rec = QPushButton("刪除選中紀錄")
-        btn_del_rec.clicked.connect(self.delete_record)
-        btn_exp_csv = QPushButton("轉出 CSV")
+        # 功能按鈕列
+        action_layout = QHBoxLayout()
+        
+        # 刪除與清空 (左側)
+        btn_del_selected = QPushButton("刪除選中項目")
+        btn_del_selected.setStyleSheet("background-color: #f39c12; color: white;")
+        btn_del_selected.clicked.connect(self.delete_selected_record)
+        
+        btn_clear_all = QPushButton("清空所有紀錄")
+        btn_clear_all.setStyleSheet("background-color: #c0392b; color: white;")
+        btn_clear_all.clicked.connect(self.clear_all_records)
+        
+        action_layout.addWidget(btn_del_selected)
+        action_layout.addWidget(btn_clear_all)
+        action_layout.addStretch() # 彈性空間
+        
+        # 匯出按鈕 (右側)
+        btn_exp_csv = QPushButton("匯出 CSV")
+        btn_exp_csv.setFixedHeight(35)
         btn_exp_csv.clicked.connect(lambda: self.export_data('csv'))
-        btn_exp_excel = QPushButton("轉出 EXCEL")
+        
+        btn_exp_excel = QPushButton("匯出 Excel")
+        btn_exp_excel.setFixedHeight(35)
         btn_exp_excel.clicked.connect(lambda: self.export_data('xlsx'))
         
-        export_layout.addWidget(btn_del_rec)
-        export_layout.addStretch()
-        export_layout.addWidget(btn_exp_csv)
-        export_layout.addWidget(btn_exp_excel)
-        record_layout.addLayout(export_layout)
+        action_layout.addWidget(btn_exp_csv)
+        action_layout.addWidget(btn_exp_excel)
         
+        record_layout.addLayout(action_layout)
         record_box.setLayout(record_layout)
         layout.addWidget(record_box)
 
@@ -130,8 +141,8 @@ class DrawingApp(QMainWindow):
         options = [f"{row['代碼']} - {row['名稱']}" for _, row in self.df.iterrows()]
         self.cb_proc.addItems(options)
 
-    # --- 核心邏輯：生成與存檔 ---
     def generate_and_save(self):
+        # 欄位補足邏輯
         cust = self.input_cust.text().upper().strip().zfill(5)[:5]
         src = "A" if self.rb_a.isChecked() else "B"
         prod = self.input_prod.text().strip().zfill(4)[:4]
@@ -148,12 +159,10 @@ class DrawingApp(QMainWindow):
         ver = self.input_ver.text().upper().strip()[:1] or "0"
         formatted = f"{cust}-{src}{prod}-{proc}{mid}-{ver}"
         
-        # 存入記憶體紀錄
+        # 暫存
         now = datetime.now().strftime("%H:%M:%S")
         self.temp_records.append([now, formatted, ""])
         self.refresh_record_table()
-        
-        # 自動複製最後一筆
         QApplication.clipboard().setText(formatted)
 
     def refresh_record_table(self):
@@ -163,38 +172,52 @@ class DrawingApp(QMainWindow):
             self.table_record.setItem(i, 1, QTableWidgetItem(code))
             self.table_record.setItem(i, 2, QTableWidgetItem(note))
 
-    def delete_record(self):
+    def delete_selected_record(self):
         current_row = self.table_record.currentRow()
         if current_row >= 0:
             del self.temp_records[current_row]
             self.refresh_record_table()
+        else:
+            QMessageBox.information(self, "提示", "請先點選表格中的一列再進行刪除。")
+
+    def clear_all_records(self):
+        """取消此次所有編碼暫存"""
+        if not self.temp_records:
+            return
+            
+        reply = QMessageBox.question(self, '確認清空', '確定要取消並清空「此次」所有的暫存編碼紀錄嗎？',
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            self.temp_records = []
+            self.refresh_record_table()
+            QMessageBox.information(self, "完成", "所有暫存紀錄已清空。")
 
     def export_data(self, file_type):
         if not self.temp_records:
-            QMessageBox.warning(self, "警告", "目前沒有任何編碼紀錄可匯出！")
+            QMessageBox.warning(self, "警告", "目前沒有紀錄可以匯出！")
             return
         
         df_export = pd.DataFrame(self.temp_records, columns=["時間", "圖號", "備註"])
-        
         file_path, _ = QFileDialog.getSaveFileName(self, "儲存檔案", "", f"Files (*.{file_type})")
+        
         if file_path:
             try:
                 if file_type == 'csv':
                     df_export.to_csv(file_path, index=False, encoding='utf-8-sig')
                 else:
                     df_export.to_excel(file_path, index=False)
-                QMessageBox.information(self, "成功", f"檔案已儲存至：\n{file_path}")
+                QMessageBox.information(self, "成功", f"檔案匯出完成！")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"匯出失敗：{str(e)}")
 
-    # --- 介面 2: 管理區 (略，同前版本) ---
+    # --- 製程管理頁面 (維持不變) ---
     def init_admin_ui(self):
         layout = QVBoxLayout(self.tab_admin)
         self.admin_table = QTableWidget(); self.admin_table.setColumnCount(2)
         self.admin_table.setHorizontalHeaderLabels(["代碼", "名稱"])
         layout.addWidget(self.admin_table)
         self.refresh_admin_table()
-        
         edit_layout = QHBoxLayout()
         self.new_code = QLineEdit(); self.new_name = QLineEdit()
         btn_add = QPushButton("新增/更新"); btn_add.clicked.connect(self.admin_add)
@@ -215,7 +238,8 @@ class DrawingApp(QMainWindow):
         code, name = self.new_code.text().upper()[:2], self.new_name.text()
         if not code or not name: return
         self.df = self.df[self.df['代碼'] != code]
-        self.df = pd.concat([self.df, pd.DataFrame({'代碼': [code], '名稱': [name]})], ignore_index=True)
+        new_row = pd.DataFrame({'代碼': [code], '名稱': [name]})
+        self.df = pd.concat([self.df, new_row], ignore_index=True)
         self.df.to_csv(self.csv_file, index=False, encoding='utf-8-sig')
         self.refresh_admin_table()
 
