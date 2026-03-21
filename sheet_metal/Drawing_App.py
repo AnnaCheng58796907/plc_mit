@@ -12,16 +12,16 @@ from PyQt5.QtGui import QFont
 class DrawingApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("圖號編碼管理系統 v8.0 (18px 專業版)")
-        self.setGeometry(100, 100, 1100, 900)
+        self.setWindowTitle("圖號編碼管理系統 v9.0 (局部強化版)")
+        self.setGeometry(100, 100, 1100, 850)
         
         self.csv_file = 'process_codes.csv'
         self.temp_records = []
         self.load_data()
         
-        # --- 全域字體設定：18px ---
-        self.main_font = QFont("Microsoft JhengHei", 18)
-        self.setFont(self.main_font)
+        # --- 設定全域字體為 12px (維持上一個版本的緊湊感) ---
+        self.general_font = QFont("Microsoft JhengHei", 12)
+        self.setFont(self.general_font)
         
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -31,7 +31,7 @@ class DrawingApp(QMainWindow):
         self.tab_generator = QWidget()
         self.tab_admin = QWidget()
         self.tabs.addTab(self.tab_generator, "圖號產生器")
-        self.tabs.addTab(self.tab_admin, "製程管理")
+        self.tabs.addTab(self.tab_admin, "製程代碼管理")
         self.main_layout.addWidget(self.tabs)
         
         self.init_generator_ui()
@@ -49,105 +49,99 @@ class DrawingApp(QMainWindow):
 
     def init_generator_ui(self):
         layout = QVBoxLayout(self.tab_generator)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setSpacing(10)
         
-        # --- 區塊 1: 輸入區 (加大高度與控制寬度) ---
+        # --- 區塊 1: 輸入區 (輸入框縮短) ---
         input_box = QGroupBox("編碼輸入")
         grid = QVBoxLayout()
-        grid.setSpacing(15)
         
         row1 = QHBoxLayout()
-        row1.addWidget(QLabel("客戶:"))
+        row1.addWidget(QLabel("客戶(5碼):"))
         self.input_cust = QLineEdit()
-        self.input_cust.setFixedWidth(150) # 精簡寬度
-        self.input_cust.setFixedHeight(45)
+        self.input_cust.setFixedWidth(120) # 縮短
         row1.addWidget(self.input_cust)
-        
         row1.addSpacing(30)
         row1.addWidget(QLabel("來源:"))
-        self.rb_a = QRadioButton("A廠內"); self.rb_a.setChecked(True)
-        self.rb_b = QRadioButton("B委外")
+        self.rb_a = QRadioButton("A 廠內"); self.rb_a.setChecked(True)
+        self.rb_b = QRadioButton("B 委外")
         row1.addWidget(self.rb_a); row1.addWidget(self.rb_b)
         row1.addStretch()
         grid.addLayout(row1)
 
         row2 = QHBoxLayout()
-        row2.addWidget(QLabel("成品:"))
+        row2.addWidget(QLabel("成品碼(4碼):"))
         self.input_prod = QLineEdit()
-        self.input_prod.setFixedWidth(150) # 精簡寬度
-        self.input_prod.setFixedHeight(45)
+        self.input_prod.setFixedWidth(100) # 縮短
         row2.addWidget(self.input_prod)
-        
         row2.addSpacing(30)
         row2.addWidget(QLabel("製程:"))
         self.cb_proc = QComboBox()
-        self.cb_proc.setMinimumWidth(350)
-        self.cb_proc.setFixedHeight(45)
+        self.cb_proc.setMinimumWidth(300)
         row2.addWidget(self.cb_proc)
         row2.addStretch()
         grid.addLayout(row2)
 
         row3 = QHBoxLayout()
-        self.check_fg = QCheckBox("成品(FG)")
+        self.check_fg = QCheckBox("業務成品(FG)")
         self.check_fg.stateChanged.connect(self.toggle_fg)
         row3.addWidget(self.check_fg)
-        
         row3.addSpacing(20)
-        row3.addWidget(QLabel("L1-2-3:"))
-        self.input_l1 = QLineEdit(); self.input_l1.setFixedWidth(60)
-        self.input_l2 = QLineEdit(); self.input_l2.setFixedWidth(60)
-        self.input_l3 = QLineEdit(); self.input_l3.setFixedWidth(60)
-        for edit in [self.input_l1, self.input_l2, self.input_l3]: edit.setFixedHeight(45)
+        row3.addWidget(QLabel("L1-L2-L3:"))
+        self.input_l1 = QLineEdit(); self.input_l1.setFixedWidth(45)
+        self.input_l2 = QLineEdit(); self.input_l2.setFixedWidth(45)
+        self.input_l3 = QLineEdit(); self.input_l3.setFixedWidth(45)
         row3.addWidget(self.input_l1); row3.addWidget(self.input_l2); row3.addWidget(self.input_l3)
-        
         row3.addSpacing(20)
-        row3.addWidget(QLabel("版本:"))
-        self.input_ver = QLineEdit("0"); self.input_ver.setFixedWidth(60); self.input_ver.setFixedHeight(45)
+        row3.addWidget(QLabel("版本:")); self.input_ver = QLineEdit("0"); self.input_ver.setFixedWidth(45)
         row3.addWidget(self.input_ver)
         row3.addStretch()
         grid.addLayout(row3)
         input_box.setLayout(grid)
         layout.addWidget(input_box)
 
-        # --- 區塊 2: 生成按鈕 (醒目) ---
-        self.btn_gen = QPushButton("★ 生成並存入紀錄 ★")
-        self.btn_gen.setFixedHeight(70)
-        self.btn_gen.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; border-radius: 10px;")
+        # --- 區塊 2: 生成按鈕 ---
+        self.btn_gen = QPushButton("生成圖號並儲存紀錄")
+        self.btn_gen.setFixedHeight(55)
+        self.btn_gen.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; font-size: 22px;")
         self.btn_gen.clicked.connect(self.generate_and_save)
         layout.addWidget(self.btn_gen)
 
-        # --- 區塊 3: 紀錄區 (寬度重新分配) ---
-        record_box = QGroupBox("暫存紀錄管理 (18px 表格)")
+        # --- 區塊 3: 紀錄區 (重點優化) ---
+        record_box = QGroupBox("暫存紀錄管理")
         record_layout = QVBoxLayout()
         
         self.table_record = QTableWidget()
         self.table_record.setColumnCount(3)
         self.table_record.setHorizontalHeaderLabels(["時間", "完整圖號", "備註"])
         
-        # 重要：調整欄位比例
-        header = self.table_record.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Fixed)       # 時間欄位固定
-        self.table_record.setColumnWidth(0, 120)               # 縮小時間
-        header.setSectionResizeMode(1, QHeaderView.Stretch)     # 圖號欄位展開 (重點)
-        header.setSectionResizeMode(2, QHeaderView.Fixed)       # 備註欄位固定
-        self.table_record.setColumnWidth(2, 150)               # 縮小備註
+        # --- 設定表格字體：18px ---
+        table_font = QFont("Microsoft JhengHei", 12)
+        self.table_record.setFont(table_font)
+        # 設定表格標題字體：18px
+        self.table_record.horizontalHeader().setFont(table_font)
+        self.table_record.verticalHeader().setDefaultSectionSize(45) # 增加行高以配合大字
         
-        self.table_record.setStyleSheet("font-size: 18px;")
+        # --- 欄位寬度精確分配 ---
+        header = self.table_record.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
+        self.table_record.setColumnWidth(0, 120) # 縮小時間
+        header.setSectionResizeMode(1, QHeaderView.Stretch) # 加大圖號 (佔滿中間)
+        header.setSectionResizeMode(2, QHeaderView.Fixed)
+        self.table_record.setColumnWidth(2, 120) # 縮小備註
+        
         record_layout.addWidget(self.table_record)
         
-        # 功能按鈕
+        # 按鈕列 (維持 12px 緊湊)
         action_layout = QHBoxLayout()
-        btn_del = QPushButton("刪除單項"); btn_del.setStyleSheet("background-color: #f39c12; color: white;")
-        btn_clr = QPushButton("全數清空"); btn_clr.setStyleSheet("background-color: #c0392b; color: white;")
+        btn_del = QPushButton("刪除項目"); btn_clr = QPushButton("取消/清空紀錄")
+        btn_del.setStyleSheet("background-color: #f39c12; color: white; height: 35px;")
+        btn_clr.setStyleSheet("background-color: #c0392b; color: white; height: 35px;")
         btn_del.clicked.connect(self.delete_selected_record)
         btn_clr.clicked.connect(self.clear_all_records)
         
         btn_csv = QPushButton("匯出 CSV"); btn_excel = QPushButton("匯出 Excel")
         btn_csv.clicked.connect(lambda: self.export_data('csv'))
         btn_excel.clicked.connect(lambda: self.export_data('xlsx'))
-        
-        for b in [btn_del, btn_clr, btn_csv, btn_excel]: b.setFixedHeight(45); b.setFixedWidth(160)
         
         action_layout.addWidget(btn_del); action_layout.addWidget(btn_clr)
         action_layout.addStretch()
@@ -157,12 +151,12 @@ class DrawingApp(QMainWindow):
         layout.addWidget(record_box)
 
     def toggle_fg(self, state):
-        e = state != Qt.Checked
-        for i in [self.input_l1, self.input_l2, self.input_l3]: i.setEnabled(e)
+        enabled = state != Qt.Checked
+        for e in [self.input_l1, self.input_l2, self.input_l3]: e.setEnabled(enabled)
 
     def update_combobox(self):
         self.cb_proc.clear()
-        self.cb_proc.addItems([f"{r['代碼']} - {r['名稱']}" for _, r in self.df.iterrows()])
+        self.cb_proc.addItems([f"{row['代碼']} - {row['名稱']}" for _, row in self.df.iterrows()])
 
     def generate_and_save(self):
         cust = self.input_cust.text().upper().strip().zfill(5)[:5]
@@ -183,7 +177,7 @@ class DrawingApp(QMainWindow):
         for i, (t, c, n) in enumerate(self.temp_records):
             self.table_record.setItem(i, 0, QTableWidgetItem(t))
             item_code = QTableWidgetItem(c)
-            item_code.setForeground(Qt.blue) # 讓圖號變藍色易於區分
+            item_code.setForeground(Qt.blue)
             self.table_record.setItem(i, 1, item_code)
             self.table_record.setItem(i, 2, QTableWidgetItem(n))
 
@@ -192,32 +186,29 @@ class DrawingApp(QMainWindow):
         if row >= 0: del self.temp_records[row]; self.refresh_record_table()
 
     def clear_all_records(self):
-        if self.temp_records and QMessageBox.question(self, '確認', '清空所有紀錄？', QMessageBox.Yes|QMessageBox.No) == QMessageBox.Yes:
+        if self.temp_records and QMessageBox.question(self, '確認', '確定要清空此次暫存紀錄嗎？', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
             self.temp_records = []; self.refresh_record_table()
 
     def export_data(self, f_type):
         if not self.temp_records: return
-        path, _ = QFileDialog.getSaveFileName(self, "儲存檔案", "", f"Files (*.{f_type})")
-        if path:
-            df_e = pd.DataFrame(self.temp_records, columns=["時間", "圖號", "備註"])
-            if f_type == 'csv': df_e.to_csv(path, index=False, encoding='utf-8-sig')
-            else: df_e.to_excel(path, index=False)
-            QMessageBox.information(self, "成功", "匯出完成")
+        df_e = pd.DataFrame(self.temp_records, columns=["時間", "圖號", "備註"])
+        f_p, _ = QFileDialog.getSaveFileName(self, "儲存檔案", "", f"Files (*.{f_type})")
+        if f_p:
+            if f_type == 'csv': df_e.to_csv(f_p, index=False, encoding='utf-8-sig')
+            else: df_e.to_excel(f_p, index=False)
+            QMessageBox.information(self, "成功", "檔案已儲存")
 
     def init_admin_ui(self):
         layout = QVBoxLayout(self.tab_admin)
         self.admin_table = QTableWidget(); self.admin_table.setColumnCount(2)
         self.admin_table.setHorizontalHeaderLabels(["代碼", "名稱"])
         self.admin_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.admin_table.setStyleSheet("font-size: 18px;")
         layout.addWidget(self.admin_table)
         self.refresh_admin_table()
-        
         edit_layout = QHBoxLayout()
-        self.new_code = QLineEdit(); self.new_code.setFixedWidth(100); self.new_code.setFixedHeight(45)
-        self.new_name = QLineEdit(); self.new_name.setFixedHeight(45)
-        btn_add = QPushButton("新增/更新"); btn_add.setFixedHeight(45)
-        btn_add.clicked.connect(self.admin_add)
+        self.new_code = QLineEdit(); self.new_code.setFixedWidth(80)
+        self.new_name = QLineEdit()
+        btn_add = QPushButton("新增/更新"); btn_add.clicked.connect(self.admin_add)
         edit_layout.addWidget(self.new_code); edit_layout.addWidget(self.new_name); edit_layout.addWidget(btn_add)
         layout.addLayout(edit_layout)
 
@@ -234,7 +225,8 @@ class DrawingApp(QMainWindow):
         if not c or not n: return
         self.df = self.df[self.df['代碼'] != c]
         self.df = pd.concat([self.df, pd.DataFrame({'代碼': [c], '名稱': [n]})], ignore_index=True)
-        self.df.to_csv(self.csv_file, index=False, encoding='utf-8-sig'); self.refresh_admin_table()
+        self.df.to_csv(self.csv_file, index=False, encoding='utf-8-sig')
+        self.refresh_admin_table()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
