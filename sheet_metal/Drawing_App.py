@@ -12,11 +12,11 @@ from PyQt5.QtGui import QFont, QIntValidator, QRegExpValidator
 class DrawingApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("圖號編碼管理系統 v16.0")
+        self.setWindowTitle("圖號編碼管理系統 v17.0 (圖號唯一性鎖定)")
         self.setGeometry(100, 100, 1100, 850)
         
         self.csv_file = 'process_codes.csv'
-        self.temp_records = []
+        self.temp_records = [] # 儲存格式: [時間, 圖號, 備註]
         self.load_data()
         
         self.general_font = QFont("Microsoft JhengHei", 12)
@@ -94,7 +94,7 @@ class DrawingApp(QMainWindow):
         layout.addWidget(self.btn_gen)
 
         # --- 紀錄表格 (12px) ---
-        record_box = QGroupBox("暫存紀錄管理 (12px)")
+        record_box = QGroupBox("暫存紀錄管理 (已啟用圖號重複鎖定)")
         record_layout = QVBoxLayout()
         self.table_record = QTableWidget(); self.table_record.setColumnCount(3)
         self.table_record.setHorizontalHeaderLabels(["生成時間", "完整圖號結果", "自定義備註"])
@@ -109,7 +109,6 @@ class DrawingApp(QMainWindow):
         self.table_record.itemChanged.connect(self.sync_note_to_list)
         record_layout.addWidget(self.table_record)
         
-        # --- 恢復功能按鈕區 (包含匯出按鈕) ---
         action_layout = QHBoxLayout()
         btn_del = QPushButton("刪除單筆項目"); btn_clr = QPushButton("清空全部紀錄")
         btn_del.setStyleSheet("background-color: #f39c12; color: white; height: 35px;")
@@ -117,23 +116,62 @@ class DrawingApp(QMainWindow):
         btn_del.clicked.connect(self.delete_selected_record)
         btn_clr.clicked.connect(self.clear_all_records)
         
-        # 這是剛才漏掉的匯出按鈕
-        btn_csv = QPushButton("匯出 CSV 檔")
-        btn_excel = QPushButton("匯出 Excel 檔")
-        btn_csv.setStyleSheet("height: 35px;")
-        btn_excel.setStyleSheet("height: 35px;")
+        btn_csv = QPushButton("匯出 CSV 檔"); btn_excel = QPushButton("匯出 Excel 檔")
+        btn_csv.setStyleSheet("height: 35px;"); btn_excel.setStyleSheet("height: 35px;")
         btn_csv.clicked.connect(lambda: self.export_data('csv'))
         btn_excel.clicked.connect(lambda: self.export_data('xlsx'))
         
-        action_layout.addWidget(btn_del); action_layout.addWidget(btn_clr)
-        action_layout.addStretch() # 把匯出按鈕推到右邊
+        action_layout.addWidget(btn_del); action_layout.addWidget(btn_clr); action_layout.addStretch()
         action_layout.addWidget(btn_csv); action_layout.addWidget(btn_excel)
-        
         record_layout.addLayout(action_layout)
         record_box.setLayout(record_layout)
         layout.addWidget(record_box)
 
-    # --- 管理與同步功能 ---
+    def generate_and_save(self):
+        # 1. 組合圖號
+        cust = f"A{self.input_cust.text().strip().zfill(4)}"
+        src = "A" if self.rb_a.isChecked() else "B"
+        prod = self.input_prod.text().strip().zfill(4)
+        proc = self.cb_proc.currentText().split(" - ")[0] if self.cb_proc.currentText() else "SA"
+        mid = "FG0000" if self.check_fg.isChecked() else f"{self.input_l1.text().strip().zfill(2)}{self.input_l2.text().strip().zfill(2)}{self.input_l3.text().strip().zfill(2)}"
+        ver = self.input_ver.text().upper().strip() or "0"
+        
+        new_formatted_code = f"{cust}-{src}{prod}-{proc}{mid}-{ver}"
+        
+        # 2. 重複性檢核 (關鍵改動)
+        # 檢查當前暫存清單 (self.temp_records) 中是否已存在該圖號
+        existing_codes = [record[1] for record in self.temp_records]
+        
+        if new_formatted_code in existing_codes:
+            QMessageBox.critical(self, "生成失敗", f"圖號重複！\n\n此圖號已存在於清單中：\n{new_formatted_code}\n\n請檢查規格或修改版本碼。")
+            return
+        
+        # 3. 若通過檢查，加入清單
+        now = datetime.now().strftime("%H:%M:%S")
+        self.table_record.itemChanged.disconnect(self.sync_note_to_list)
+        self.temp_records.append([now, new_formatted_code, ""])
+        self.refresh_record_table()
+        self.table_record.itemChanged.connect(self.sync_note_to_list)
+        
+        # 自動複製到剪貼簿
+        QApplication.clipboard().setText(new_formatted_code)
+
+    def refresh_record_table(self):
+        self.table_record.setRowCount(len(self.temp_records))
+        for i, (t, c, n) in enumerate(self.temp_records):
+            it0 = QTableWidgetItem(t); it0.setFlags(it0.flags() ^ Qt.ItemIsEditable)
+            it1 = QTableWidgetItem(c); it1.setFlags(it1.flags() ^ Qt.ItemIsEditable); it1.setForeground(Qt.blue)
+            it2 = QTableWidgetItem(n)
+            self.table_record.setItem(i, 0, it0); self.table_record.setItem(i, 1, it1); self.table_record.setItem(i, 2, it2)
+
+    # --- 以下為其餘功能保持不變 ---
+    def load_data(self):
+        if not os.path.exists(self.csv_file):
+            data = {'代碼': ['AS', 'PC', 'LC', 'MA', 'QC', 'SA'], '名稱': ['組裝', '粉烤', '液烤', '素材', '品檢', '半成品']}
+            self.df = pd.DataFrame(data); self.df.to_csv(self.csv_file, index=False, encoding='utf-8-sig')
+        else: self.df = pd.read_csv(self.csv_file)
+        self.df = self.df.sort_values(by='代碼').reset_index(drop=True)
+
     def init_admin_ui(self):
         layout = QVBoxLayout(self.tab_admin)
         admin_box = QGroupBox("現有製程代碼清單")
@@ -141,34 +179,17 @@ class DrawingApp(QMainWindow):
         self.admin_table = QTableWidget(); self.admin_table.setColumnCount(2)
         self.admin_table.setHorizontalHeaderLabels(["英文代碼", "中文說明"])
         self.admin_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.admin_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.admin_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        admin_layout.addWidget(self.admin_table)
-        admin_box.setLayout(admin_layout)
-        layout.addWidget(admin_box)
-        
-        edit_box = QGroupBox("新增或刪除製程代碼")
-        edit_layout = QVBoxLayout()
-        input_row = QHBoxLayout()
-        self.new_code = QLineEdit(); self.new_code.setPlaceholderText("2位英文"); self.new_code.setMaxLength(2)
-        self.new_code.setValidator(QRegExpValidator(QRegExp("[a-zA-Z]{2}")))
-        self.new_name = QLineEdit(); self.new_name.setPlaceholderText("中文說明")
-        input_row.addWidget(QLabel("代碼:")); input_row.addWidget(self.new_code)
-        input_row.addWidget(QLabel("說明:")); input_row.addWidget(self.new_name)
-        edit_layout.addLayout(input_row)
-        
-        btn_row = QHBoxLayout()
-        self.btn_admin_add = QPushButton("【新增】製程代碼")
+        self.admin_table.setSelectionBehavior(QTableWidget.SelectRows); self.admin_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        admin_layout.addWidget(self.admin_table); admin_box.setLayout(admin_layout); layout.addWidget(admin_box)
+        edit_box = QGroupBox("新增或刪除製程代碼"); edit_layout = QVBoxLayout()
+        input_row = QHBoxLayout(); self.new_code = QLineEdit(); self.new_code.setPlaceholderText("2位英文"); self.new_code.setMaxLength(2)
+        self.new_code.setValidator(QRegExpValidator(QRegExp("[a-zA-Z]{2}"))); self.new_name = QLineEdit(); self.new_name.setPlaceholderText("中文說明")
+        input_row.addWidget(QLabel("代碼:")); input_row.addWidget(self.new_code); input_row.addWidget(QLabel("說明:")); input_row.addWidget(self.new_name); edit_layout.addLayout(input_row)
+        btn_row = QHBoxLayout(); self.btn_admin_add = QPushButton("【新增】製程代碼")
         self.btn_admin_add.setStyleSheet("background-color: #27ae60; color: white; height: 40px; font-weight: bold;")
-        self.btn_admin_add.clicked.connect(self.admin_add)
-        self.btn_admin_del = QPushButton("【刪除】選中代碼")
+        self.btn_admin_add.clicked.connect(self.admin_add); self.btn_admin_del = QPushButton("【刪除】選中代碼")
         self.btn_admin_del.setStyleSheet("background-color: #c0392b; color: white; height: 40px; font-weight: bold;")
-        self.btn_admin_del.clicked.connect(self.admin_del)
-        btn_row.addWidget(self.btn_admin_add); btn_row.addWidget(self.btn_admin_del)
-        edit_layout.addLayout(btn_row)
-        edit_box.setLayout(edit_layout)
-        layout.addWidget(edit_box)
-        self.refresh_admin_table()
+        self.btn_admin_del.clicked.connect(self.admin_del); btn_row.addWidget(self.btn_admin_add); btn_row.addWidget(self.btn_admin_del); edit_layout.addLayout(btn_row); edit_box.setLayout(edit_layout); layout.addWidget(edit_box); self.refresh_admin_table()
 
     def refresh_admin_table(self):
         self.df = self.df.sort_values(by='代碼').reset_index(drop=True)
@@ -184,63 +205,30 @@ class DrawingApp(QMainWindow):
         if code in self.df['代碼'].values or name in self.df['名稱'].values:
             QMessageBox.critical(self, "失敗", "代碼或名稱重複！"); return
         new_row = pd.DataFrame({'代碼': [code], '名稱': [name]})
-        self.df = pd.concat([self.df, new_row], ignore_index=True)
-        self.df.to_csv(self.csv_file, index=False, encoding='utf-8-sig')
-        self.new_code.clear(); self.new_name.clear(); self.refresh_admin_table()
+        self.df = pd.concat([self.df, new_row], ignore_index=True); self.df.to_csv(self.csv_file, index=False, encoding='utf-8-sig'); self.new_code.clear(); self.new_name.clear(); self.refresh_admin_table()
 
     def admin_del(self):
         row = self.admin_table.currentRow()
         if row < 0: return
         target_code = self.admin_table.item(row, 0).text()
         if QMessageBox.question(self, '確認', f"確定刪除：{target_code}？", QMessageBox.Yes|QMessageBox.No) == QMessageBox.Yes:
-            self.df = self.df[self.df['代碼'] != target_code]
-            self.df.to_csv(self.csv_file, index=False, encoding='utf-8-sig'); self.refresh_admin_table()
+            self.df = self.df[self.df['代碼'] != target_code]; self.df.to_csv(self.csv_file, index=False, encoding='utf-8-sig'); self.refresh_admin_table()
 
     def export_data(self, f_type):
-        if not self.temp_records:
-            QMessageBox.warning(self, "警告", "目前清單中沒有資料可以匯出。")
-            return
-        df_e = pd.DataFrame(self.temp_records, columns=["生成時間", "完整圖號", "備註"])
+        if not self.temp_records: return
+        df_e = pd.DataFrame(self.temp_records, columns=["生成時間", "圖號", "備註"])
         f_p, _ = QFileDialog.getSaveFileName(self, "儲存檔案", "", f"檔案 (*.{f_type})")
         if f_p:
-            try:
-                if f_type == 'csv': df_e.to_csv(f_p, index=False, encoding='utf-8-sig')
-                else: df_e.to_excel(f_p, index=False)
-                QMessageBox.information(self, "成功", f"檔案已成功匯出至：\n{f_p}")
-            except Exception as e:
-                QMessageBox.critical(self, "錯誤", f"匯出失敗：{str(e)}")
+            if f_type == 'csv': df_e.to_csv(f_p, index=False, encoding='utf-8-sig')
+            else: df_e.to_excel(f_p, index=False)
+            QMessageBox.information(self, "成功", "匯出成功")
 
-    # --- 通用邏輯 ---
     def toggle_fg(self, state):
         enabled = state != Qt.Checked
         for e in [self.input_l1, self.input_l2, self.input_l3]: e.setEnabled(enabled)
 
     def update_combobox(self):
-        self.cb_proc.clear()
-        self.cb_proc.addItems([f"{r['代碼']} - {r['名稱']}" for _, r in self.df.iterrows()])
-
-    def generate_and_save(self):
-        cust = f"A{self.input_cust.text().strip().zfill(4)}"
-        src = "A" if self.rb_a.isChecked() else "B"
-        prod = self.input_prod.text().strip().zfill(4)
-        proc = self.cb_proc.currentText().split(" - ")[0] if self.cb_proc.currentText() else "SA"
-        mid = "FG0000" if self.check_fg.isChecked() else f"{self.input_l1.text().strip().zfill(2)}{self.input_l2.text().strip().zfill(2)}{self.input_l3.text().strip().zfill(2)}"
-        ver = self.input_ver.text().upper().strip() or "0"
-        formatted = f"{cust}-{src}{prod}-{proc}{mid}-{ver}"
-        now = datetime.now().strftime("%H:%M:%S")
-        self.table_record.itemChanged.disconnect(self.sync_note_to_list)
-        self.temp_records.append([now, formatted, ""])
-        self.refresh_record_table()
-        self.table_record.itemChanged.connect(self.sync_note_to_list)
-        QApplication.clipboard().setText(formatted)
-
-    def refresh_record_table(self):
-        self.table_record.setRowCount(len(self.temp_records))
-        for i, (t, c, n) in enumerate(self.temp_records):
-            it0 = QTableWidgetItem(t); it0.setFlags(it0.flags() ^ Qt.ItemIsEditable)
-            it1 = QTableWidgetItem(c); it1.setFlags(it1.flags() ^ Qt.ItemIsEditable); it1.setForeground(Qt.blue)
-            it2 = QTableWidgetItem(n)
-            self.table_record.setItem(i, 0, it0); self.table_record.setItem(i, 1, it1); self.table_record.setItem(i, 2, it2)
+        self.cb_proc.clear(); self.cb_proc.addItems([f"{r['代碼']} - {r['名稱']}" for _, r in self.df.iterrows()])
 
     def sync_note_to_list(self, item):
         if item.column() == 2:
@@ -252,7 +240,7 @@ class DrawingApp(QMainWindow):
         if row >= 0: del self.temp_records[row]; self.refresh_record_table()
 
     def clear_all_records(self):
-        if self.temp_records and QMessageBox.question(self, '確認', '確定要清空清單嗎？', QMessageBox.Yes|QMessageBox.No) == QMessageBox.Yes:
+        if self.temp_records and QMessageBox.question(self, '確認', '確定清空？', QMessageBox.Yes|QMessageBox.No) == QMessageBox.Yes:
             self.temp_records = []; self.refresh_record_table()
 
 if __name__ == "__main__":
