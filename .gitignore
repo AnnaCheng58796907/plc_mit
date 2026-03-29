@@ -22,3 +22,5 @@ env/
 # 忽略系統檔案
 .DS_Store
 Thumbs.db
+config.ini
+
