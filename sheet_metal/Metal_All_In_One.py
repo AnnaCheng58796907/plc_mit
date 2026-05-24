@@ -9,7 +9,7 @@ class MetalApp:
         self.root.title("板金設計全功能工具箱 v7.0")
         self.root.geometry("600x900")
         
-        self.excel_file = "bend_parameters.xlsx"
+        self.excel_file = "板金展開系數.xlsx"
         self.side_entries = []
         self.angle_entries = []
         
