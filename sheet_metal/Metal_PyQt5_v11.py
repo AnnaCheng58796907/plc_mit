@@ -10,14 +10,14 @@ from PyQt5.QtGui import QPainter, QPen, QColor, QFont
 from PyQt5.QtCore import Qt, QRectF
 
 class DrawWidget(QWidget):
-    """專用的繪圖畫布組件"""
+    """專用的繪圖畫布組件（支援系統高 DPI 自適應縮放）"""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.mode = "none" # "bend", "cylinder", "cone", "none"
+        self.mode = "none"  # 繪圖模式: "bend", "cylinder", "cone", "none"
         self.draw_data = {}
-        setBackgroundRole = self.setAutoFillBackground(True)
         
-        # 設定畫布背景為白色
+        # 正確設定畫布背景為白色
+        self.setAutoFillBackground(True)
         p = self.palette()
         p.setColor(self.backgroundRole(), QColor("white"))
         self.setPalette(p)
@@ -39,16 +39,19 @@ class DrawWidget(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing) # 開啟反鋸齒，線條超平滑
+        painter.setRenderHint(QPainter.Antialiasing)  # 開啟反鋸齒，線條更平滑
+        
+        # 取得系統當前的設備像素比 (預防系統文字或螢幕放大 125%/150% 時圖形比例失真)
+        dpr = self.devicePixelRatioF()
         
         if self.mode == "bend":
-            self.draw_bend(painter)
+            self.draw_bend(painter, dpr)
         elif self.mode == "cylinder":
-            self.draw_cylinder(painter)
+            self.draw_cylinder(painter, dpr)
         elif self.mode == "cone":
-            self.draw_cone(painter)
+            self.draw_cone(painter, dpr)
 
-    def draw_bend(self, painter):
+    def draw_bend(self, painter, dpr):
         sides = self.draw_data.get("sides", [])
         angles = self.draw_data.get("angles", [])
         if not sides: return
@@ -56,19 +59,20 @@ class DrawWidget(QWidget):
         pen = QPen(QColor("#333333"), 3, Qt.SolidLine)
         painter.setPen(pen)
         
+        # 初始繪圖起點與縮放基準
         x, y = 80.0, 400.0
         current_angle = 0.0
-        scale = 2.0  # 1mm = 2px
+        scale = 2.0 / dpr  # 依據系統縮放比例實施物理校正 (1mm = 2px)
 
         for i, length_mm in enumerate(sides):
             length = length_mm * scale
             rad = math.radians(current_angle)
             nx = x + length * math.cos(rad)
-            ny = y - length * math.sin(rad) # Qt Y軸向下
+            ny = y - length * math.sin(rad)  # Qt 的 Y 軸朝下
 
             painter.drawLine(int(x), int(y), int(nx), int(ny))
             
-            # 標註文字
+            # 標註折彎邊編號
             painter.setFont(QFont("Arial", 9))
             painter.drawText(int(x + (nx-x)/2), int(y + (ny-y)/2 - 8), f"L{i+1}")
 
@@ -76,12 +80,12 @@ class DrawWidget(QWidget):
             if i < len(angles):
                 current_angle += (180.0 - angles[i])
 
-    def draw_cylinder(self, painter):
+    def draw_cylinder(self, painter, dpr):
         L = self.draw_data.get("L", 0)
         H = self.draw_data.get("H", 0)
         if L <= 0 or H <= 0: return
 
-        scale = 0.6
+        scale = 0.6 / dpr  # 縮放基準加入 dpr 校正
         painter.setPen(QPen(QColor("#1976D2"), 2, Qt.SolidLine))
         painter.setBrush(QColor("#E3F2FD"))
         
@@ -92,16 +96,16 @@ class DrawWidget(QWidget):
         painter.drawText(int(50 + (L*scale)/2 - 30), 140, f"展開長: {L:.2f}")
         painter.drawText(20, int(150 + (H*scale)/2), f"H: {H:.1f}")
 
-    def draw_cone(self, painter):
+    def draw_cone(self, painter, dpr):
         R = self.draw_data.get("R", 0)
         r = self.draw_data.get("r", 0)
         theta = self.draw_data.get("theta", 0)
         if R <= 0: return
 
-        scale = 1.0
-        if R > 350: scale = 350.0 / R
+        scale = 1.0 / dpr
+        if R > 350: scale = (350.0 / R) / dpr
 
-        cx, cy = 250.0, 80.0 # 扇形圓心
+        cx, cy = 250.0, 80.0  # 扇形圓心基準點
         start_ang = 270.0 - (theta / 2.0)
 
         # Qt 角度單位為 1/16 度
@@ -117,7 +121,7 @@ class DrawWidget(QWidget):
         rect_r = QRectF(cx - r*scale, cy - r*scale, r*2*scale, r*2*scale)
         painter.drawArc(rect_r, qt_start, qt_span)
 
-        # 畫兩端連接線
+        # 畫扇形兩端邊緣連接線
         painter.setPen(QPen(QColor("black"), 2, Qt.SolidLine))
         for ang in [start_ang, start_ang + theta]:
             rad = math.radians(ang)
@@ -129,6 +133,7 @@ class DrawWidget(QWidget):
 
 
 class MetalApp(QMainWindow):
+    """板金設計全功能工具箱主視窗"""
     def __init__(self):
         super().__init__()
         self.setWindowTitle("板金設計全功能工具箱 v11.0 (PyQt5)")
@@ -154,23 +159,22 @@ class MetalApp(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Excel 錯誤", f"讀取失敗: {str(e)}")
         else:
-            # 建立空測試資料
+            # 建立預設測試資料 (無外部 Excel 時使用)
             self.all_sheets = {"範例黑鐵_V10": pd.DataFrame(index=["SPCC"], columns=["1.0", "2.0"])}
 
     def init_ui(self):
-        # 使用 QSplitter 建立可左右拉動的左右分割面板
+        # 使用 QSplitter 建立可滑動調整邊界的左右分割面板
         splitter = QSplitter(Qt.Horizontal)
         self.setCentralWidget(splitter)
 
-        # 左側控制區
+        # Left: 控制參數與輸入區
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
-        
         self.tabs = QTabWidget()
         left_layout.addWidget(self.tabs)
         splitter.addWidget(left_widget)
 
-        # 右側繪圖區
+        # Right: 圖形即時放樣畫布區
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.addWidget(QLabel("📐 即時圖形放樣示意 (非精密加工比例)"))
@@ -179,10 +183,10 @@ class MetalApp(QMainWindow):
         right_layout.addWidget(self.canvas)
         splitter.addWidget(right_widget)
 
-        # 調整左右初始比例
+        # 初始左右配置比例 (控制台 450px : 畫布區 650px)
         splitter.setSizes([450, 650])
 
-        # 初始化分頁
+        # 初始化載入各分頁
         self.init_bend_tab()
         self.init_special_tab()
         self.init_hw_tab()
@@ -203,7 +207,7 @@ class MetalApp(QMainWindow):
         f1.addRow("Excel 分頁:", self.c_sheet_sel)
         layout.addWidget(g1)
 
-        # 2. 規格與 K90
+        # 2. 規格與 K90 檢索
         g2 = QGroupBox("2. 規格檢索")
         f2 = QFormLayout(g2)
         self.c_row = QComboBox()
@@ -216,7 +220,7 @@ class MetalApp(QMainWindow):
         f2.addRow("90° 補償值:", self.e_k90)
         layout.addWidget(g2)
 
-        # 3. 尺寸輸入區 (加滾動條防溢出)
+        # 3. 尺寸輸入區 (內含 QScrollArea 滾動條，防多次折彎時介面溢出)
         g3 = QGroupBox("3. 輸入尺寸與角度 (內邊相加法)")
         v3 = QVBoxLayout(g3)
         
@@ -235,7 +239,7 @@ class MetalApp(QMainWindow):
         v3.addWidget(self.scroll_area)
         layout.addWidget(g3)
 
-        # 按鈕與結果
+        # 計算按鈕與大型顯示標籤
         self.btn_calc = QPushButton("執行計算並繪圖")
         self.btn_calc.setStyleSheet("background-color: #1976D2; color: white; font-weight: bold; font-size: 14px; padding: 6px;")
         self.btn_calc.clicked.connect(self.calculate_bend)
@@ -247,7 +251,7 @@ class MetalApp(QMainWindow):
         layout.addWidget(self.l_res)
 
         self.tabs.addTab(tab, "📐 動態折彎")
-        self.on_sheet_change() # 觸發首次初始化
+        self.on_sheet_change()  # 觸發首次畫面渲染
 
     def on_sheet_change(self):
         sheet = self.c_sheet_sel.currentText()
@@ -277,7 +281,7 @@ class MetalApp(QMainWindow):
                 self.e_k90.clear()
 
     def refresh_bend_ui(self):
-        # 清除舊輸入框
+        # 清除過往的舊動態輸入框
         while self.bend_form.count():
             child = self.bend_form.takeAt(0)
             if child.widget(): child.widget().deleteLater()
@@ -307,9 +311,9 @@ class MetalApp(QMainWindow):
             total = sum_l + sum_k
             
             self.l_res.setText(f"展開總長: {total:.3f} mm")
-            self.canvas.set_bend_data(sides, angles) # 送資料去畫布畫圖
+            self.canvas.set_bend_data(sides, angles)
         except Exception as e:
-            QMessageBox.warning(self, "輸入錯誤", "請確認所有尺寸與 K0 值皆為有效數字。")
+            QMessageBox.warning(self, "輸入錯誤", "請確認所有尺寸與 K 值欄位皆為有效數字。")
 
     # --- 分頁 2: 特殊固定折彎 ---
     def init_special_tab(self):
@@ -383,7 +387,7 @@ class MetalApp(QMainWindow):
             except:
                 self.l_hw_res.setText("Ø --")
 
-    # --- 分頁 4: 圓柱/圓錐放樣 (幾何展開) ---
+    # --- 分頁 4: 幾何放樣 (圓柱/圓錐展開) ---
     def init_layout_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -445,7 +449,7 @@ class MetalApp(QMainWindow):
                 T = float(self.layout_inputs["T"].text())
                 H = float(self.layout_inputs["H"].text())
                 
-                L = math.pi * (d + T) # 中軸層周長
+                L = math.pi * (d + T)  # 中軸層周長計算方式
                 self.l_lay_res.setText(f"展開長方形尺寸:\n長度 (L): {L:.2f} mm\n寬度 (H): {H:.1f} mm")
                 self.canvas.set_cylinder_data(L, H)
                 
@@ -456,13 +460,13 @@ class MetalApp(QMainWindow):
                 T = float(self.layout_inputs["T"].text())
                 
                 if D_in == d_in:
-                    QMessageBox.warning(self, "資料錯誤", "大小端內徑不能相同，請使用圓柱體模式。")
+                    QMessageBox.warning(self, "資料錯誤", "大小端內徑不能相同，請選用圓柱體模式。")
                     return
                     
                 D = D_in + T
                 d = d_in + T
                 
-                # 斜邊高
+                # 幾何三角展開公式計算
                 slant = math.sqrt(H**2 + ((D - d) / 2.0)**2)
                 R = (D * slant) / (D - d)
                 r = R - slant
@@ -475,16 +479,15 @@ class MetalApp(QMainWindow):
             QMessageBox.warning(self, "輸入錯誤", "請檢查所有參數欄位是否為正確數字。")
 
 if __name__ == "__main__":
-    # --- 1. 關鍵核心：強制 PyQt5 配合系統螢幕與文字縮放設定 ---
-    import os
+    # --- 1. 高 DPI 環境配置（必須在主程式應用實例建立前宣告） ---
     from PyQt5.QtCore import Qt
     
     # 啟用高 DPI 自動縮放
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    # 讓圖示與控制元件也配合高 DPI 縮放
+    # 允許按鈕圖示與控制元件配合高精細度螢幕縮放
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     
-    # --- 2. 啟動應用程式 ---
+    # --- 2. 啟動板金工具箱應用程式 ---
     app = QApplication(sys.argv)
     window = MetalApp()
     window.show()

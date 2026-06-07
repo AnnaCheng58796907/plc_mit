@@ -25,4 +25,6 @@ Thumbs.db
 config.ini
 
 # 忽略excel
-*.xlsx
+**/*.xlsx
+
+**/pdf_specs
